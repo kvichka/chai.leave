@@ -1,0 +1,6 @@
+staff_code,full_name,full_name_kh,email,position_title,department,supervisor_staff_code,hire_date,probation_end_date,exit_date,employment_status,role,gender
+CHAI-KH-001,Sophea Chan,សុភា ចាន់,sophea.chan@clintonhealthaccess.org,Country Director,Leadership,,2018-02-01,2018-05-01,,active,system_admin,F
+CHAI-KH-002,Dara Pen,តារា ប៉ែន,dara.pen@clintonhealthaccess.org,HR & Operations Manager,Operations,CHAI-KH-001,2019-07-15,2019-10-15,,active,hr_admin,M
+CHAI-KH-003,Sokha Meas,សុខា មាស,sokha.meas@clintonhealthaccess.org,Director of Programmes,Programmes,CHAI-KH-001,2020-03-02,2020-06-02,,active,supervisor,F
+CHAI-KH-005,Chantha Ly,ចន្ធា លី,chantha.ly@clintonhealthaccess.org,Monitoring & Evaluation Officer,Malaria,CHAI-KH-003,2022-01-10,2022-04-10,,active,employee,F
+CHAI-KH-008,Sreymom Kim,ស្រីមុំ គីម,sreymom.kim@clintonhealthaccess.org,Data Analyst,HIV,CHAI-KH-004,2026-06-01,2026-09-01,,on_probation,employee,F

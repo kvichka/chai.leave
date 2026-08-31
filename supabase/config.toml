@@ -1,0 +1,62 @@
+# Local development configuration for the Supabase CLI.
+# Production settings live in the Supabase dashboard, not here.
+
+project_id = "chai-leave"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
+# app_private is deliberately NOT exposed. The RLS helper functions must not be
+# callable over HTTP.
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[db.pooler]
+enabled = false
+
+[studio]
+enabled = true
+port = 54323
+
+[inbucket]
+enabled = true
+port = 54324
+
+[storage]
+enabled = true
+file_size_limit = "10MiB"
+
+[auth]
+enabled = true
+site_url = "http://localhost:5173"
+additional_redirect_urls = ["http://localhost:5173", "http://127.0.0.1:5173"]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+enable_signup = false          # accounts come from Google only
+enable_anonymous_sign_ins = false
+
+[auth.email]
+# Enabled locally so the acceptance tests can sign in as the seeded demo users
+# with a password. In production, Google is the only provider.
+enable_signup = false
+enable_confirmations = false
+double_confirm_changes = true
+
+[auth.external.google]
+enabled = false                # set in the dashboard for the hosted project
+client_id = ""
+secret = ""
+redirect_uri = ""
+
+[analytics]
+enabled = false
+
+[edge_runtime]
+enabled = true
+policy = "oneshot"
