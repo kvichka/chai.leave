@@ -244,32 +244,24 @@ Sections 1–3 of `supabase/seed.sql` are reference data — settings, the 14 le
 types, and public holidays — and are safe anywhere. Sections 4–7 create eight
 demo staff with a shared password and some demo requests; they belong on a test
 project, not on anything holding real records.
-
 ### 5. Create the first administrator
 
-Nobody can create accounts until one administrator exists, and the first one has
-to be made by hand. Run this in the Supabase SQL editor, changing the four
-values at the top:
+Chicken and egg: accounts are created by an administrator, so the first one has
+to be made outside the application.
 
-```sql
-select public.rpc_admin_create_employee(
-  'you@example.org',        -- email you will sign in with
-  'ChangeMeOnFirstLogin1',  -- temporary password, at least 10 characters
-  'ADM-001',                -- staff code
-  'Your Name',
-  '2024-01-15'::date,       -- your real hire date; it drives pro-rating
-  'Operations',             -- department
-  'Data Analyst',           -- position
-  null,                     -- supervisor
-  null,                     -- gender: only gates maternity/paternity leave
-  null,                     -- name in Khmer
-  'system_admin'
-);
-```
+Open **[docs/bootstrap-admin.sql](docs/bootstrap-admin.sql)**, change the values
+at the top, and paste it into the Supabase SQL editor.
 
-That function normally refuses a non-HR caller, but the SQL editor connects as
-the database owner, which bypasses Row Level Security — which is exactly why it
-works for bootstrapping and only for bootstrapping.
+It does **not** call `rpc_admin_create_employee`. That function checks
+`app_private.fn_is_hr()` explicitly, and the SQL editor has no signed-in user,
+so the check fails regardless of what privileges the connection holds — being
+the database owner bypasses Row Level Security, not an explicit guard inside a
+function. The script calls the underlying helper instead, which is precisely why
+that helper has EXECUTE revoked from every application role and is reachable
+only from a direct database connection.
+
+The script also generates your entitlements for the current leave year, so the
+balances are populated rather than empty on first sign-in.
 
 Then:
 

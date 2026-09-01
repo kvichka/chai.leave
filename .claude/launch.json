@@ -1,0 +1,15 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dev",
+      "//1": "Absolute path to npm: Node was installed after this machine's shells were started, so a process holding a stale PATH cannot resolve a bare `npm`. Forward slashes and the 8.3 short name avoid both JSON escaping and the space in 'Program Files'.",
+      "//2": "autoPort is false because the port is not arbitrary. Supabase's Site URL and redirect allow-list are set to http://localhost:5173 (see supabase/config.toml and the README); an OAuth callback on a different port would not match.",
+      "runtimeExecutable": "C:/PROGRA~1/nodejs/npm.cmd",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5173,
+      "autoPort": false
+    }
+  ],
+  "autoVerify": false
+}

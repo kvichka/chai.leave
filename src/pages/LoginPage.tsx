@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { CalendarCheck2, FlaskConical } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { Field, Input, NativeSelect } from '@/components/ui/primitives'
+import { Field, Input } from '@/components/ui/primitives'
 import { useAuth, ALLOWED_EMAIL_DOMAIN } from '@/providers/AuthProvider'
 import { useToast } from '@/components/ui/Toast'
 import { humanError } from '@/lib/errors'
@@ -104,73 +104,107 @@ export function LoginPage() {
   )
 }
 
-const DEMO_USERS = [
-  { email: 'chantha.ly@clintonhealthaccess.org', label: 'Chantha Ly — employee' },
-  { email: 'bopha.sok@clintonhealthaccess.org', label: 'Bopha Sok — employee' },
-  { email: 'vanna.chea@clintonhealthaccess.org', label: 'Vanna Chea — employee' },
-  { email: 'sreymom.kim@clintonhealthaccess.org', label: 'Sreymom Kim — employee, hired Jun 2026' },
-  { email: 'rithy.norn@clintonhealthaccess.org', label: 'Rithy Norn — supervisor' },
-  { email: 'sokha.meas@clintonhealthaccess.org', label: 'Sokha Meas — supervisor, 3 reports' },
-  { email: 'dara.pen@clintonhealthaccess.org', label: 'Dara Pen — HR admin' },
-  { email: 'sophea.chan@clintonhealthaccess.org', label: 'Sophea Chan — system admin' },
+/**
+ * The demo staff, in reporting order. The role is what makes each one worth
+ * clicking: the screen looks quite different depending on who you are.
+ *
+ * Deliberately no passwords here. They live in VITE_DEMO_PASSWORD in
+ * .env.local, which is gitignored — one of these accounts is an HR admin, and
+ * a PIN committed to a public repository is a PIN anyone can use against the
+ * live project.
+ */
+const DEMO_PASSWORD = import.meta.env.VITE_DEMO_PASSWORD as string | undefined
+
+const DEMO_USERS: { email: string; name: string; role: string; note: string }[] = [
+  { email: 'sokha.meas@example.org', name: 'Sokha Meas', role: 'HR admin', note: 'Sees everyone' },
+  { email: 'dara.pen@example.org', name: 'Dara Pen', role: 'Supervisor', note: 'Whole programmes tree' },
+  { email: 'sreymom.kim@example.org', name: 'Sreymom Kim', role: 'Supervisor', note: 'Malaria, 2 reports' },
+  { email: 'rithy.norn@example.org', name: 'Rithy Norn', role: 'Supervisor', note: 'HIV, 2 reports' },
+  { email: 'chantha.ly@example.org', name: 'Chantha Ly', role: 'Employee', note: 'Malaria' },
+  { email: 'bopha.sok@example.org', name: 'Bopha Sok', role: 'Employee', note: 'Malaria' },
+  { email: 'vanna.chea@example.org', name: 'Vanna Chea', role: 'Employee', note: 'HIV' },
+  { email: 'pisey.chhun@example.org', name: 'Pisey Chhun', role: 'Employee', note: 'HIV' },
+  { email: 'kosal.sam@example.org', name: 'Kosal Sam', role: 'Employee', note: 'Operations' },
+  { email: 'nary.tep@example.org', name: 'Nary Tep', role: 'Employee', note: 'Operations' },
 ]
 
+const ROLE_STYLES: Record<string, string> = {
+  'HR admin': 'bg-chai-100 text-chai-800',
+  Supervisor: 'bg-amber-100 text-amber-800',
+  Employee: 'bg-slate-100 text-slate-600',
+}
+
 /**
- * One-click sign-in for the seeded demo staff. Rendered only when
- * import.meta.env.DEV is true, so Vite strips it from production builds - and
- * the accounts it lists exist only because seed.sql created them.
+ * One-click sign-in for the demo staff. Rendered only when this is a
+ * development build AND a demo password is configured, so Vite strips it from
+ * production and it stays absent from any checkout that has not opted in.
  */
 function DevSignIn() {
-  if (!import.meta.env.DEV) return null
+  if (!import.meta.env.DEV || !DEMO_PASSWORD) return null
   return <DevSignInPanel />
 }
 
 function DevSignInPanel() {
   const { signIn } = useAuth()
-  const [email, setEmail] = useState(DEMO_USERS[0]!.email)
-  const [busy, setBusy] = useState(false)
+  const [pending, setPending] = useState<string | null>(null)
   const toast = useToast()
 
-  async function go() {
-    setBusy(true)
+  async function go(email: string) {
+    setPending(email)
     try {
-      await signIn(email, 'demo-password-not-for-production')
+      await signIn(email, DEMO_PASSWORD!)
+      // On success the auth listener swaps the tree out from under us.
     } catch (err) {
-      toast.error('Demo sign-in failed', humanError(err))
-      setBusy(false)
+      const message = humanError(err)
+      toast.error(
+        'That demo account could not sign in',
+        /invalid login credentials/i.test(message)
+          ? 'The account is missing, or VITE_DEMO_PASSWORD in .env.local no longer matches the password set on the demo staff.'
+          : message,
+      )
+      setPending(null)
     }
   }
 
   return (
-    <details className="mt-4 rounded-lg border border-dashed border-slate-300 bg-chai-50/60">
+    <details className="mt-4 overflow-hidden rounded-lg border border-dashed border-slate-300 bg-chai-50/60">
       <summary className="flex cursor-pointer items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600">
         <FlaskConical className="h-3.5 w-3.5" />
-        Developer sign-in (local only)
+        Sign in as a demo user — no password
       </summary>
-      <div className="space-y-2 border-t border-dashed border-slate-300 p-3">
-        <NativeSelect
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          aria-label="Demo account"
-          className="text-xs"
-        >
+      <div className="border-t border-dashed border-slate-300 p-2">
+        <ul className="space-y-1">
           {DEMO_USERS.map((u) => (
-            <option key={u.email} value={u.email}>
-              {u.label}
-            </option>
+            <li key={u.email}>
+              <button
+                type="button"
+                onClick={() => void go(u.email)}
+                disabled={pending !== null}
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition hover:bg-white disabled:opacity-50 disabled:hover:bg-transparent"
+              >
+                <span className="min-w-0 flex-1 truncate text-xs font-medium text-slate-800">
+                  {u.name}
+                  {pending === u.email ? (
+                    <span className="ml-1.5 font-normal text-slate-400">signing in…</span>
+                  ) : null}
+                </span>
+                <span className="hidden shrink-0 text-[11px] text-slate-400 sm:inline">
+                  {u.note}
+                </span>
+                <span
+                  className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                    ROLE_STYLES[u.role] ?? 'bg-slate-100 text-slate-600'
+                  }`}
+                >
+                  {u.role}
+                </span>
+              </button>
+            </li>
           ))}
-        </NativeSelect>
-        <Button
-          variant="secondary"
-          size="sm"
-          className="w-full justify-center"
-          loading={busy}
-          onClick={() => void go()}
-        >
-          Sign in as this demo user
-        </Button>
-        <p className="text-[11px] leading-relaxed text-slate-500">
-          Seeded accounts sharing one password. Compiled out of production builds.
+        </ul>
+        <p className="px-2 pb-0.5 pt-2 text-[11px] leading-relaxed text-slate-500">
+          Test accounts on the reserved example.org domain, sharing one password from
+          .env.local. Compiled out of production builds.
         </p>
       </div>
     </details>

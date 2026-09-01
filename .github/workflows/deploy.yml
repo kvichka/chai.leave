@@ -1,0 +1,153 @@
+name: Test and deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Types and pure unit tests. Fast, no services, always runs.
+  # ---------------------------------------------------------------------------
+  unit:
+    name: Typecheck and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+  # ---------------------------------------------------------------------------
+  # 2. The database: every migration, the seed, the RLS proof, and acceptance
+  #    suites A-D — against a throwaway Supabase started on the runner.
+  #
+  #    This is the job that protects the business rules, and it is the reason
+  #    CI is worth having even though the local machine has no Docker: GitHub's
+  #    runners do, so the full local stack runs here even when it cannot run on
+  #    your laptop.
+  # ---------------------------------------------------------------------------
+  database:
+    name: Migrations, RLS and acceptance tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start Supabase (applies every migration, then seed.sql)
+        run: supabase start
+
+      - name: Show which migrations were applied
+        run: supabase migration list --local
+
+      - name: RLS proof — 13 cases
+        run: npm run db:rls
+
+      - name: Acceptance suites A, B, C, D
+        run: npm run test:db
+
+      - name: Stop Supabase
+        if: always()
+        run: supabase stop --no-backup
+
+  # ---------------------------------------------------------------------------
+  # 3. Build. Only after both test jobs are green.
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build
+    needs: [unit, database]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build
+        env:
+          # Repository VARIABLES, not secrets. Both values are public: they are
+          # compiled into the bundle that GitHub Pages serves to the open
+          # internet. Storing them as secrets would hide them from the settings
+          # page while leaving them in plain sight in the JavaScript, which is
+          # worse than not hiding them. See README "Security model".
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+          # Optional: restrict sign-in to one email domain. Leave the variable
+          # unset to allow any account an administrator has created.
+          VITE_ALLOWED_EMAIL_DOMAIN: ${{ vars.VITE_ALLOWED_EMAIL_DOMAIN }}
+          # Pages serves from https://<user>.github.io/<repo>/, so assets need
+          # the repo name as their base path.
+          VITE_BASE_PATH: /${{ github.event.repository.name }}/
+        run: |
+          if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_ANON_KEY" ]; then
+            echo "::error::Set the repository variables VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY under Settings → Secrets and variables → Actions → Variables."
+            exit 1
+          fi
+          npm run build
+
+      - name: Refuse to publish secrets or sourcemaps
+        run: npm run check:bundle
+
+      - name: Report bundle size
+        run: |
+          echo "### Deploy size" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          du -sh dist >> "$GITHUB_STEP_SUMMARY"
+          find dist -name '*.js' -printf '%s %p\n' | sort -rn | head -8 \
+            | awk '{printf "%8.1f kB  %s\n", $1/1024, $2}' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  # ---------------------------------------------------------------------------
+  # 4. Publish.
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -10,14 +10,31 @@ import type {
   PublicHoliday,
 } from '@/lib/database.types'
 
-/** Anything that can change a balance invalidates all of these. */
-const LEAVE_KEYS = ['requests', 'balances', 'pending_approvals', 'absences', 'team_absences',
-  'out_today', 'coverage', 'liability', 'notifications', 'entitlements', 'audit_log']
+/**
+ * Anything that can change a balance invalidates all of these.
+ *
+ * Keep decision_history in the list. A supervisor approving a request watches
+ * it leave the queue and expects to see it arrive in the history directly
+ * below on the same screen; without this key that table keeps serving its
+ * cached rows until something else refetches it.
+ */
+const LEAVE_KEYS = ['requests', 'balances', 'pending_approvals', 'decision_history', 'absences',
+  'team_absences', 'out_today', 'coverage', 'liability', 'notifications', 'entitlements',
+  'audit_log']
+
+/**
+ * Reference data. Cached for minutes rather than seconds because it barely
+ * changes, which is precisely why the mutation that edits it has to say so -
+ * otherwise an administrator saves a leave type and watches the old value sit
+ * there for half an hour. Only the admin mutations opt in, via alsoInvalidate.
+ */
+const REFERENCE_KEYS = ['employees', 'leave_types', 'holidays'] as const
+type ReferenceKey = (typeof REFERENCE_KEYS)[number]
 
 function useInvalidate() {
   const qc = useQueryClient()
-  return () => {
-    for (const key of LEAVE_KEYS) void qc.invalidateQueries({ queryKey: [key] })
+  return (extra: readonly string[] = []) => {
+    for (const key of [...LEAVE_KEYS, ...extra]) void qc.invalidateQueries({ queryKey: [key] })
   }
 }
 
@@ -32,6 +49,8 @@ function useAppMutation<TArgs, TResult>(
     successBody?: (result: TResult, args: TArgs) => string | undefined
     errorTitle?: string
     onDone?: (result: TResult, args: TArgs) => void
+    /** Reference keys this mutation also changes, e.g. ['employees']. */
+    alsoInvalidate?: readonly ReferenceKey[]
   } = {},
 ) {
   const toast = useToast()
@@ -40,7 +59,7 @@ function useAppMutation<TArgs, TResult>(
   return useMutation({
     mutationFn: fn,
     onSuccess: (result, args) => {
-      invalidate()
+      invalidate(opts.alsoInvalidate)
       if (opts.successTitle) {
         toast.success(opts.successTitle(result, args), opts.successBody?.(result, args))
       }
@@ -306,7 +325,11 @@ export function useSaveEmployee() {
       const { error } = await supabase.from('employees').update(rest).eq('id', id)
       if (error) throw error
     },
-    { successTitle: () => 'Employee updated', errorTitle: 'Could not update this employee' },
+    {
+      successTitle: () => 'Employee updated',
+      errorTitle: 'Could not update this employee',
+      alsoInvalidate: ['employees'],
+    },
   )
 }
 
@@ -318,7 +341,11 @@ export function useSaveLeaveType() {
       const { error } = await supabase.from('leave_types').update(rest).eq('code', code)
       if (error) throw error
     },
-    { successTitle: () => 'Leave type updated', errorTitle: 'Could not update this leave type' },
+    {
+      successTitle: () => 'Leave type updated',
+      errorTitle: 'Could not update this leave type',
+      alsoInvalidate: ['leave_types'],
+    },
   )
 }
 
@@ -341,6 +368,7 @@ export function useSaveHolidays() {
       successTitle: (n) => `${n} public holiday(s) saved`,
       successBody: () => 'Verify these against the official sub-decree before relying on them.',
       errorTitle: 'Could not save public holidays',
+      alsoInvalidate: ['holidays'],
     },
   )
 }
@@ -351,7 +379,11 @@ export function useDeleteHoliday() {
       const { error } = await supabase.from('public_holidays').delete().eq('holiday_date', date)
       if (error) throw error
     },
-    { successTitle: () => 'Public holiday removed', errorTitle: 'Could not remove that holiday' },
+    {
+      successTitle: () => 'Public holiday removed',
+      errorTitle: 'Could not remove that holiday',
+      alsoInvalidate: ['holidays'],
+    },
   )
 }
 
@@ -400,6 +432,7 @@ export function useCreateEmployee() {
       successTitle: (e) => `${e.full_name} can now sign in`,
       successBody: () => 'Give them the temporary password shown on screen.',
       errorTitle: 'Could not create this account',
+      alsoInvalidate: ['employees'],
     },
   )
 }
@@ -417,20 +450,10 @@ export function useResetPassword() {
       successTitle: () => 'Temporary password set',
       successBody: () => 'They will be asked to choose a new one when they sign in.',
       errorTitle: 'Could not reset the password',
+      alsoInvalidate: ['employees'],
     },
   )
 }
 
-/**
- * Readable but not guessable: no ambiguous characters, so it survives being
- * read down a phone line or copied off a sticky note.
- */
-export function generateTempPassword(length = 14): string {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'
-  const bytes = new Uint32Array(length)
-  crypto.getRandomValues(bytes)
-  let out = ''
-  for (let i = 0; i < length; i++) out += alphabet[bytes[i]! % alphabet.length]
-  // Guarantee the character-class rules the change screen enforces.
-  return `${out.slice(0, -3)}${'Aa'}${(bytes[0]! % 10).toString()}`
-}
+/** Re-exported so callers do not need to know where the rules live. */
+export { generatePin as generateTempPassword } from '@/lib/password'

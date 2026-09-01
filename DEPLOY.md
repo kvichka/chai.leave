@@ -36,6 +36,21 @@ git ls-files | grep -c "^\.env\.local$"
 
 That must print `0`.
 
+#### Or: upload without the command line
+
+If you would rather not use git, `chai-leave-github.zip` contains the same
+files. Create the empty repository on GitHub, then on its front page choose
+**uploading an existing file**, unzip the archive on your machine and drag the
+*contents* — not the containing folder — into the browser. Commit directly to
+`main`.
+
+The archive already leaves out `node_modules`, `dist`, `.env.local` and
+`demo-staff-passwords.csv`. Its paths use forward slashes, so GitHub keeps the
+folder structure instead of flattening it.
+
+Git is the better option if you plan to keep changing the app — every later edit
+becomes one `git push` rather than another manual upload.
+
 ### 2. Turn on Pages
 
 Repository → **Settings** → **Pages** → Source: **GitHub Actions**.
@@ -53,6 +68,13 @@ Settings → **Secrets and variables** → **Actions** → the **Variables** tab
 | `VITE_SUPABASE_ANON_KEY` | your `anon` / publishable key |
 
 Optionally `VITE_ALLOWED_EMAIL_DOMAIN` to restrict sign-in to one domain.
+
+**Do not add `VITE_DEMO_PASSWORD` here.** It powers the one-click demo sign-in
+panel and lives only in your local `.env.local`. Setting it as a repository
+variable would compile the demo staff's shared password into a bundle served to
+the open internet — and one of those accounts is an HR administrator, who can
+see every employee and reset anyone's password. The panel is stripped from
+production builds regardless; the variable is the only way to undo that.
 
 **Variables, deliberately, not Secrets.** Both values are compiled into the
 JavaScript that Pages serves to the open internet — anyone can read them out of
@@ -82,8 +104,8 @@ database ──────┘
 
 | Job | What it does | Blocks the deploy? |
 |---|---|---|
-| **unit** | `tsc --noEmit`, 38 unit tests | yes |
-| **database** | Starts a throwaway Supabase on the runner, applies all 12 migrations and the seed, runs the 13 RLS checks and acceptance suites A–D | yes |
+| **unit** | `tsc --noEmit`, 51 unit tests | yes |
+| **database** | Starts a throwaway Supabase on the runner, applies all 13 migrations and the seed, runs the 13 RLS checks and acceptance suites A–D | yes |
 | **build** | Compiles, then refuses to publish if a `service_role` key or any sourcemap reached `dist` | yes |
 | **deploy** | Publishes to Pages | — |
 

@@ -34,7 +34,7 @@ import {
   NativeSelect,
   TableSkeleton,
 } from '@/components/ui/primitives'
-import { DataTable } from '@/components/ui/DataTable'
+import { DataTable, type GroupBy } from '@/components/ui/DataTable'
 import {
   currentLeaveYear,
   useAbsenceCalendar,
@@ -77,6 +77,7 @@ export function HrDashboardPage() {
 
   const [search, setSearch] = useState('')
   const [department, setDepartment] = useState('')
+  const [grouped, setGrouped] = useState(true)
 
   /**
    * One filter for the whole page. Filtering only the table at the bottom, as
@@ -205,11 +206,15 @@ export function HrDashboardPage() {
     () => [
       { accessorKey: 'staff_code', header: 'Staff code' },
       { accessorKey: 'full_name', header: 'Name' },
-      {
-        accessorKey: 'department',
-        header: 'Department',
-        cell: (c) => String(c.getValue() ?? '—'),
-      },
+      ...(grouped
+        ? []
+        : [
+            {
+              accessorKey: 'department',
+              header: 'Department',
+              cell: (c) => String(c.getValue() ?? '—'),
+            } as ColumnDef<LeaveBalance, unknown>,
+          ]),
       { accessorKey: 'name_en', header: 'Leave type' },
       {
         accessorKey: 'unit',
@@ -244,6 +249,33 @@ export function HrDashboardPage() {
         cell: (c) => <span className="tabular-nums">{fmtPercent(c.getValue() as number)}</span>,
       },
     ],
+    [grouped],
+  )
+
+  /**
+   * Section header summary. Only annual leave is totalled: every row in that
+   * total is in working days, so it is a sum that means something. Adding
+   * across leave types would mix working and calendar days.
+   */
+  const groupByDepartment = useMemo<GroupBy<LeaveBalance>>(
+    () => ({
+      value: (b) => b.department ?? '',
+      emptyLabel: 'No department set',
+      summary: (rows) => {
+        const staffCount = new Set(rows.map((b) => b.employee_id)).size
+        const annualLeft = rows
+          .filter((b) => b.leave_type_code === 'ANNUAL')
+          .reduce((sum, b) => sum + Number(b.available_days), 0)
+        return (
+          <>
+            {staffCount} {staffCount === 1 ? 'person' : 'people'}
+            <span className="mx-1.5 text-slate-300">|</span>
+            <span className="font-medium text-slate-600">{fmtDays(annualLeft)}</span> days annual
+            leave left
+          </>
+        )
+      },
+    }),
     [],
   )
 
@@ -539,6 +571,15 @@ export function HrDashboardPage() {
             All balances
           </h2>
           <div className="flex flex-wrap gap-2">
+            <label className="flex cursor-pointer select-none items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50">
+              <input
+                type="checkbox"
+                checked={grouped}
+                onChange={(e) => setGrouped(e.target.checked)}
+                className="h-3.5 w-3.5 rounded border-slate-300 text-chai-600 focus:ring-chai-500"
+              />
+              Group by department
+            </label>
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -556,6 +597,7 @@ export function HrDashboardPage() {
           globalFilter={search}
           onGlobalFilterChange={setSearch}
           pageSize={30}
+          groupBy={grouped ? groupByDepartment : undefined}
           initialSorting={[{ id: 'full_name', desc: false }]}
           empty={
             <EmptyState icon={<FileSpreadsheet className="h-7 w-7" />} title="No balances yet">

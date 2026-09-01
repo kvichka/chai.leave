@@ -29,7 +29,8 @@ set prorate_method           = 'monthly_accrual',
     allow_negative_balance   = false,
     min_days_notice_default  = 0,
     max_pending_per_employee = 5,
-    coverage_risk_threshold  = 30.00
+    coverage_risk_threshold  = 30.00,
+    min_password_length      = 7
 where id = 1;
 
 -- =============================================================================

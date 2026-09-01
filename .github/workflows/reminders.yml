@@ -1,0 +1,40 @@
+name: Stale approval reminders
+
+# The fallback for the pg_cron job in 0010_scheduling.sql. On the Supabase free
+# tier pg_cron may be unavailable, so this runs the identical function on a
+# schedule instead. Only one of the two is needed - if pg_cron is running,
+# fn_notify_stale_approvals is idempotent anyway (a partial unique index on
+# notifications stops it re-nagging), so no harm if both fire.
+#
+# 19:00 UTC = 02:00 Asia/Phnom_Penh the next morning, Monday to Friday.
+
+on:
+  schedule:
+    - cron: '0 19 * * 0-4'
+  workflow_dispatch:
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call fn_notify_stale_approvals
+        env:
+          SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          # A genuine secret, unlike the anon key: it bypasses RLS. It exists
+          # only in Actions secrets and never in the repo or the bundle.
+          SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -z "$SERVICE_ROLE_KEY" ]; then
+            echo "SUPABASE_SERVICE_ROLE_KEY is not set. Skipping."
+            exit 0
+          fi
+          response=$(curl -sS -w '\n%{http_code}' -X POST \
+            "$SUPABASE_URL/rest/v1/rpc/fn_notify_stale_approvals" \
+            -H "apikey: $SERVICE_ROLE_KEY" \
+            -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{}')
+          body=$(echo "$response" | head -n -1)
+          code=$(echo "$response" | tail -n 1)
+          echo "HTTP $code: $body"
+          if [ "$code" != "200" ]; then exit 1; fi
