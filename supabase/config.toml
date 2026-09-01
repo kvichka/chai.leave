@@ -38,18 +38,27 @@ site_url = "http://localhost:5173"
 additional_redirect_urls = ["http://localhost:5173", "http://127.0.0.1:5173"]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
-enable_signup = false          # accounts come from Google only
+enable_signup = false          # accounts are created by an administrator, never self-service
 enable_anonymous_sign_ins = false
 
 [auth.email]
-# Enabled locally so the acceptance tests can sign in as the seeded demo users
-# with a password. In production, Google is the only provider.
+# 'enabled' must be stated explicitly. The CLI unmarshals this section into a
+# struct, so any boolean left out becomes false rather than taking its
+# documented default - and an omitted 'enabled' means every password sign-in
+# fails with "Email logins are disabled". That is what broke CI.
+#
+# Email and password is the only way in, here and in production. Signup stays
+# off: an administrator creates the account, the person changes the password on
+# first sign-in.
+enabled = true
 enable_signup = false
 enable_confirmations = false
 double_confirm_changes = true
 
 [auth.external.google]
-enabled = false                # set in the dashboard for the hosted project
+# Unused. Google sign-in was dropped in favour of administrator-created
+# accounts; kept at false so nothing enables it by accident.
+enabled = false
 client_id = ""
 secret = ""
 redirect_uri = ""
