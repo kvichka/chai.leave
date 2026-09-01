@@ -42,16 +42,20 @@ enable_signup = false          # accounts are created by an administrator, never
 enable_anonymous_sign_ins = false
 
 [auth.email]
-# 'enabled' must be stated explicitly. The CLI unmarshals this section into a
-# struct, so any boolean left out becomes false rather than taking its
-# documented default - and an omitted 'enabled' means every password sign-in
-# fails with "Email logins are disabled". That is what broke CI.
+# Both keys are needed, and enable_signup is the one that matters.
 #
-# Email and password is the only way in, here and in production. Signup stays
-# off: an administrator creates the account, the person changes the password on
-# first sign-in.
+# The CLI maps auth.email.enable_signup onto GoTrue's EXTERNAL_EMAIL_ENABLED,
+# which gates sign-IN as well as sign-up. Setting it false does not mean "no
+# self-service registration"; it means the email provider is switched off
+# entirely and every password sign-in returns "Email logins are disabled".
+# That is what broke CI twice.
+#
+# Self-service registration is still blocked, by [auth] enable_signup = false
+# above. That is the global GOTRUE_DISABLE_SIGNUP switch and it is the right
+# place for the rule: accounts are created by an administrator through
+# rpc_admin_create_employee, never by someone filling in a form.
 enabled = true
-enable_signup = false
+enable_signup = true
 enable_confirmations = false
 double_confirm_changes = true
 
