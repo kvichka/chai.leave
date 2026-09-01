@@ -24,9 +24,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Node 22+ is required, not merely preferred: @supabase/realtime-js
+      # relies on a global WebSocket, which Node only exposes from 22 onwards.
+      # On 20 every test that creates a Supabase client dies with
+      # "Node.js detected but native WebSocket not found". 24 matches the
+      # development machine, which is what stops CI and local disagreeing.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - run: npm ci
@@ -54,7 +59,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - run: npm ci
@@ -92,7 +97,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - run: npm ci

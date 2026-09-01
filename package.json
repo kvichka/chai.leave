@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Leave management for CHAI Cambodia",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "dev": "vite",
