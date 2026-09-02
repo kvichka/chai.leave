@@ -294,12 +294,15 @@ export function KpiTile({
   sub,
   tone = 'slate',
   icon,
+  className,
 }: {
   label: string
   value: ReactNode
   sub?: ReactNode
   tone?: 'slate' | 'chai' | 'amber' | 'emerald' | 'red'
   icon?: ReactNode
+  /** For grid spans: an odd number of tiles never divides evenly. */
+  className?: string
 }) {
   const tones: Record<string, string> = {
     slate: 'text-slate-900',
@@ -309,7 +312,7 @@ export function KpiTile({
     red: 'text-red-600',
   }
   return (
-    <div className="card p-4">
+    <div className={cn('card p-4', className)}>
       <div className="flex items-start justify-between gap-2">
         <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
         {icon ? <span className="text-slate-300">{icon}</span> : null}

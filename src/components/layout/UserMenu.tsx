@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { ChevronDown, KeyRound, LogOut } from 'lucide-react'
+import { ChevronDown, ImageUp, KeyRound, LogOut } from 'lucide-react'
 import { useAuth } from '@/providers/AuthProvider'
 import { useEmployees } from '@/hooks/useLeaveData'
 import { ChangePasswordDialog } from '@/components/ChangePasswordDialog'
-import { initials } from '@/lib/format'
+import { Avatar } from '@/components/Avatar'
+import { ProfilePhotoDialog } from '@/components/ProfilePhotoDialog'
 
 const ROLE_LABEL: Record<string, string> = {
   employee: 'Employee',
@@ -22,6 +23,7 @@ export function UserMenu() {
   const { employee, signOut } = useAuth()
   const { data: employees = [] } = useEmployees()
   const [changing, setChanging] = useState(false)
+  const [changingPhoto, setChangingPhoto] = useState(false)
 
   if (!employee) return null
 
@@ -38,9 +40,13 @@ export function UserMenu() {
             className="flex items-center gap-2 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
             aria-label="Account menu"
           >
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/15 text-[11px] font-semibold text-white ring-1 ring-inset ring-white/25">
-              {initials(employee.full_name)}
-            </span>
+            <Avatar
+              fullName={employee.full_name}
+              avatarPath={employee.avatar_path}
+              avatarEmoji={employee.avatar_emoji}
+              size="md"
+              className="h-8 w-8 bg-white/15 text-[11px] text-white ring-1 ring-inset ring-white/25"
+            />
             <span className="hidden leading-tight sm:block">
               <span className="block max-w-[11rem] truncate text-xs font-medium text-white">
                 {employee.full_name}
@@ -88,6 +94,14 @@ export function UserMenu() {
 
             <DropdownMenu.Item
               className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm text-slate-700 outline-none data-[highlighted]:bg-slate-50"
+              onSelect={() => setChangingPhoto(true)}
+            >
+              <ImageUp className="h-4 w-4 text-slate-400" />
+              {employee.avatar_path || employee.avatar_emoji ? 'Change your avatar' : 'Add a photo or emoji'}
+            </DropdownMenu.Item>
+
+            <DropdownMenu.Item
+              className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm text-slate-700 outline-none data-[highlighted]:bg-slate-50"
               onSelect={() => setChanging(true)}
             >
               <KeyRound className="h-4 w-4 text-slate-400" />
@@ -108,6 +122,11 @@ export function UserMenu() {
       </DropdownMenu.Root>
 
       <ChangePasswordDialog open={changing} onOpenChange={setChanging} />
+      <ProfilePhotoDialog
+        employee={employee}
+        open={changingPhoto}
+        onOpenChange={setChangingPhoto}
+      />
     </>
   )
 }

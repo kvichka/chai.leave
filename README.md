@@ -19,6 +19,7 @@ accrued leave liability" are now questions with answers.
 - [Local development](#local-development)
 - [Verification](#verification)
 - [Deployment](#deployment)
+- [Hosting limits and cost](#hosting-limits-and-cost)
 - [Security model](#security-model)
 - [Status and data protection](#status-and-data-protection)
 - [Decisions for HR](#decisions-for-hr)
@@ -444,6 +445,86 @@ than GitHub's 404 page.
 
 ---
 
+## Hosting limits and cost
+
+Both halves run on free tiers. The figures below were measured on
+**2026-09-01**, against a database holding 14 employees, 11 leave requests and
+175 entitlement rows.
+
+### Supabase free plan
+
+| Limit | Free plan | Measured | Verdict |
+|---|---|---|---|
+| Database size | 500 MB | 14 MB | 2.8% used |
+| File storage | 1 GB | 0 MB (no attachments yet) | fine |
+| Egress | 5 GB/month | API JSON only; static assets are served by Pages | fine |
+| Monthly active users | 50,000 | 14 | irrelevant at this scale |
+| Edge function calls | 500,000 | 0 (`send-notification` not deployed) | fine |
+| Realtime connections | 200 | 0 — the app does not use Realtime | fine |
+| Active projects | 2 | 1 | one spare |
+| **Idle pausing** | **paused after ~1 week** | — | **see below** |
+| **Backups** | **none** | — | **see below** |
+| Point-in-time recovery | not offered | — | `$100/month` on Pro; not needed |
+| Log retention | 1 day API/DB, 1 hour auth | — | `audit_log` is in Postgres, so it is permanent |
+| Support | community forum | — | no SLA |
+
+### GitHub free plan
+
+| Limit | Free plan | Measured |
+|---|---|---|
+| Published site size | 1 GB | 1.5 MB |
+| Bandwidth | 100 GB/month (soft) | negligible at 70 staff |
+| Deployment timeout | 10 minutes | build takes about 1 minute |
+| Actions minutes | unlimited on **public** repositories | ~5 minutes per push, most of it the `database` job |
+| Pages on a private repo | requires a paid plan | not applicable — this repo is public |
+
+### How fast the database grows
+
+`audit_log` is the only table that grows without bound, at **1.11 kB per row**.
+At 70 staff, expect roughly **5-8 MB a year** including entitlements. The 500 MB
+cap is therefore decades away. Database size is not the constraint; the two
+below are.
+
+### The three limits that actually matter
+
+1. **The project pauses after about a week of inactivity.** A leave app has
+   genuinely quiet weeks - Khmer New Year, Pchum Ben. The first person back gets
+   an error page, not a slow one, and somebody must open the Supabase dashboard
+   and click **Restore**. Staff get no warning and there is no automatic
+   wake-up. This is the most likely way the system embarrasses whoever rolled it
+   out.
+2. **There are no backups.** Not "backups that are awkward to restore" - none.
+   Delete an employee and their entitlements cascade away with them. `audit_log`
+   records *that* it happened, which is not the same as being able to undo it.
+   Pro includes 7 days.
+3. **The source is public**, because Pages on a private repository needs a paid
+   GitHub plan. That is safe by design - the anon key is meant to be public and
+   RLS is the real control - but it is why no password may ever be committed,
+   and why `scripts/check-bundle.mjs` fails the build if the demo password
+   reaches `dist`.
+
+### One clause to know about
+
+GitHub Pages' terms prohibit "processing sensitive transactions such as
+passwords" and running commercial SaaS. This case reads as compliant on both
+counts: Pages serves static files only, credentials go straight to Supabase, and
+this is an internal nonprofit tool rather than a commercial service. But a system
+holding sick-leave records is being hosted on a free consumer tier, and if CHAI
+ever reviews this formally, that is the clause someone will point at. Better to
+know before it is raised.
+
+### What USD 25/month changes
+
+Pausing stops. Backups appear (7 days). Database goes to 8 GB, storage to
+100 GB, log retention to 7 days, and support becomes email rather than a forum.
+
+For testing, the free tier is the right choice. Before real staff leave depends
+on this, items 1 and 2 above are the two that should not be accepted - and
+USD 300 a year is still roughly a fifth of the cheapest commercial leave tool,
+none of which model working-day and calendar-day units in one system anyway.
+
+---
+
 ## Security model
 
 **The anon key is public.** It ships inside the bundle. Row Level Security is
@@ -568,10 +649,9 @@ answer.
   the year begins. A wrong holiday silently miscounts every piece of leave that
   spans it.
 - **The Supabase free tier pauses a project after about seven days of no
-  activity.** A leave app has quiet weeks. Either budget the paid tier (about
-  USD 25/month) or accept that somebody must click "restore" from time to time —
-  and that the first person to hit a paused project sees an error, not a
-  spinner. Raise this with your supervisor *before* rollout.
+  activity, and takes no backups.** Both are covered in full under
+  [Hosting limits and cost](#hosting-limits-and-cost). Raise them with your
+  supervisor *before* rollout.
 - **`pg_cron` is not available on the free tier**, so the stale-approval
   reminder falls back to `.github/workflows/reminders.yml`. Both call the same
   function and it is idempotent, so running both is harmless.

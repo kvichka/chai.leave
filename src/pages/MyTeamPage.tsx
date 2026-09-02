@@ -32,7 +32,8 @@ import {
   useSettings,
 } from '@/hooks/useLeaveData'
 import { useAuth } from '@/providers/AuthProvider'
-import { fmtDate, fmtDays, initials } from '@/lib/format'
+import { fmtDate, fmtDays } from '@/lib/format'
+import { Avatar } from '@/components/Avatar'
 import { cn } from '@/lib/cn'
 import type { Employee } from '@/lib/database.types'
 
@@ -99,13 +100,17 @@ export function MyTeamPage() {
   }, [employees, employee])
 
   const annualByEmployee = useMemo(() => {
-    const m = new Map<string, { available: number; entitled: number; taken: number }>()
+    const m = new Map<
+      string,
+      { available: number; entitled: number; taken: number; pending: number }
+    >()
     for (const b of balances) {
       if (b.leave_type_code !== 'ANNUAL') continue
       m.set(b.employee_id, {
         available: Number(b.available_days),
         entitled: Number(b.entitled_days),
         taken: Number(b.taken_days),
+        pending: Number(b.pending_days),
       })
     }
     return m
@@ -181,7 +186,7 @@ export function MyTeamPage() {
         <KpiTile
           label="Away this week"
           value={awayThisWeek}
-          sub={awayThisWeek === 0 ? "next 7 days" : `of  in the team`}
+          sub={awayThisWeek === 0 ? 'next 7 days' : `of ${tree.length} in the team`}
           tone={tree.length > 0 && awayThisWeek / tree.length > 0.3 ? "amber" : "slate"}
           icon={<CalendarRange className="h-4 w-4" />}
         />
@@ -193,6 +198,7 @@ export function MyTeamPage() {
           icon={<CalendarClock className="h-4 w-4" />}
         />
         <KpiTile
+          className="sm:col-span-2 lg:col-span-2 xl:col-span-1"
           label="Annual leave unused"
           value={`${fmtDays(teamUnused)}d`}
           sub="across the team this year"
@@ -223,9 +229,7 @@ export function MyTeamPage() {
               <tr>
                 <th className="th">Person</th>
                 <th className="th">Department</th>
-                <th className="th">Status</th>
-                <th className="th text-right">Taken</th>
-                <th className="th text-right">Remaining</th>
+                <th className="th">Annual leave</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -247,9 +251,12 @@ export function MyTeamPage() {
                             └
                           </span>
                         ) : null}
-                        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-chai-100 text-[11px] font-semibold text-chai-800">
-                          {initials(e.full_name)}
-                        </span>
+                        <Avatar
+                          fullName={e.full_name}
+                          avatarPath={e.avatar_path}
+                          avatarEmoji={e.avatar_emoji}
+                          size="sm"
+                        />
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium text-slate-900">
                             {e.full_name}
@@ -263,6 +270,26 @@ export function MyTeamPage() {
                               </span>
                             ) : null}
                           </p>
+                          {/* Badges belong with the person, not in a column of
+                              their own that reads "—" whenever the team is all
+                              in — which is most days. */}
+                          {away || waiting > 0 || e.employment_status !== 'active' ? (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {away ? (
+                                <Badge tone="chai">
+                                  Away{awayRow ? ` · back ${fmtDate(awayRow.return_date)}` : ''}
+                                </Badge>
+                              ) : null}
+                              {waiting > 0 ? (
+                                <Badge tone="amber">{waiting} awaiting you</Badge>
+                              ) : null}
+                              {e.employment_status !== 'active' ? (
+                                <Badge tone="slate">
+                                  {e.employment_status.replace('_', ' ')}
+                                </Badge>
+                              ) : null}
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     </td>
@@ -270,44 +297,10 @@ export function MyTeamPage() {
                     <td className="td">{e.department ?? '—'}</td>
 
                     <td className="td">
-                      <div className="flex flex-wrap gap-1">
-                        {away ? (
-                          <Badge tone="chai">
-                            Away{awayRow ? ` · back ${fmtDate(awayRow.return_date)}` : ''}
-                          </Badge>
-                        ) : null}
-                        {waiting > 0 ? (
-                          <Badge tone="amber">
-                            {waiting} awaiting you
-                          </Badge>
-                        ) : null}
-                        {e.employment_status !== 'active' ? (
-                          <Badge tone="slate">{e.employment_status.replace('_', ' ')}</Badge>
-                        ) : null}
-                        {!away && waiting === 0 && e.employment_status === 'active' ? (
-                          <span className="text-xs text-slate-400">—</span>
-                        ) : null}
-                      </div>
-                    </td>
-
-                    <td className="td text-right tabular-nums">
-                      {annual ? fmtDays(annual.taken) : '—'}
-                    </td>
-
-                    <td className="td text-right">
                       {annual ? (
-                        <span
-                          className={cn(
-                            'font-semibold tabular-nums',
-                            annual.entitled > 0 && annual.available / annual.entitled > 0.75
-                              ? 'text-chaiDarkGold'
-                              : 'text-slate-900',
-                          )}
-                        >
-                          {fmtDays(annual.available)}
-                        </span>
+                        <AnnualLeaveBar annual={annual} />
                       ) : (
-                        <span className="text-slate-400">no entitlement</span>
+                        <span className="text-xs text-slate-400">no entitlement</span>
                       )}
                     </td>
                   </tr>
@@ -318,8 +311,8 @@ export function MyTeamPage() {
         </div>
 
         <p className="border-t border-slate-100 px-4 py-2.5 text-xs text-slate-500">
-          A remaining balance shown in gold is more than three quarters untouched. Unused leave is
-          a burnout signal, not a saving — worth a conversation before it bunches up in December.
+          Unused leave is a burnout signal, not a saving. A bar flagged in gold is more than three
+          quarters untouched — worth a conversation before it bunches up in December.
         </p>
       </Card>
 
@@ -328,6 +321,68 @@ export function MyTeamPage() {
         <TeamAbsenceChart leaveYear={leaveYear} teamIds={teamIds} />
       </div>
     </>
+  )
+}
+
+/**
+ * Taken, awaiting a decision, and still to book, as one bar.
+ *
+ * This replaced a Taken column and a Remaining column. Two numbers side by
+ * side make a reader do the division; a bar shows the proportion directly,
+ * which is the only thing a supervisor is actually reading them for. The
+ * colours match the chart below, so the two agree.
+ */
+function AnnualLeaveBar({
+  annual,
+}: {
+  annual: { available: number; entitled: number; taken: number; pending: number }
+}) {
+  const { available, entitled, taken, pending } = annual
+  // Guard against a zero entitlement, and against a negative balance widening
+  // a segment past the bar.
+  const denominator = Math.max(entitled, taken + pending, 0.0001)
+  const takenPct = Math.min((taken / denominator) * 100, 100)
+  const pendingPct = Math.min((pending / denominator) * 100, 100 - takenPct)
+  const mostlyUnused = entitled > 0 && available / entitled > 0.75
+
+  return (
+    <div className="min-w-[170px] max-w-[240px]">
+      <div className="mb-1 flex items-baseline justify-between gap-2">
+        <span className="text-xs text-slate-600">
+          <span
+            className={cn(
+              'font-semibold tabular-nums',
+              mostlyUnused ? 'text-chaiDarkGold' : 'text-slate-900',
+            )}
+          >
+            {fmtDays(available)}
+          </span>{' '}
+          of {fmtDays(entitled)} left
+        </span>
+        {mostlyUnused ? (
+          <span
+            className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-chaiDarkGold"
+            title="More than three quarters of the year's annual leave is still untouched"
+          >
+            mostly unused
+          </span>
+        ) : null}
+      </div>
+
+      <div
+        className="flex h-1.5 overflow-hidden rounded-full bg-chaiLightBlue"
+        role="img"
+        aria-label={`${fmtDays(taken)} taken, ${fmtDays(pending)} awaiting a decision, ${fmtDays(available)} still to book of ${fmtDays(entitled)}`}
+      >
+        <div style={{ width: `${takenPct}%`, backgroundColor: CHART_TAKEN }} />
+        <div style={{ width: `${pendingPct}%`, backgroundColor: CHART_PENDING }} />
+      </div>
+
+      <p className="mt-1 text-[10px] text-slate-400">
+        {fmtDays(taken)} taken
+        {pending > 0 ? ` · ${fmtDays(pending)} awaiting you` : ''}
+      </p>
+    </div>
   )
 }
 

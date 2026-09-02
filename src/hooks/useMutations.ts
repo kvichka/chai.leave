@@ -3,6 +3,7 @@ import { supabase, ATTACHMENT_BUCKET } from '@/lib/supabase'
 import { useToast } from '@/components/ui/Toast'
 import { humanError } from '@/lib/errors'
 import type {
+  CompLeaveClaim,
   DayPortion,
   Employee,
   LeaveRequest,
@@ -20,7 +21,7 @@ import type {
  */
 const LEAVE_KEYS = ['requests', 'balances', 'pending_approvals', 'decision_history', 'absences',
   'team_absences', 'out_today', 'coverage', 'liability', 'notifications', 'entitlements',
-  'audit_log']
+  'audit_log', 'comp_claims']
 
 /**
  * Reference data. Cached for minutes rather than seconds because it barely
@@ -28,7 +29,7 @@ const LEAVE_KEYS = ['requests', 'balances', 'pending_approvals', 'decision_histo
  * otherwise an administrator saves a leave type and watches the old value sit
  * there for half an hour. Only the admin mutations opt in, via alsoInvalidate.
  */
-const REFERENCE_KEYS = ['employees', 'leave_types', 'holidays'] as const
+const REFERENCE_KEYS = ['employees', 'leave_types', 'holidays', 'me'] as const
 type ReferenceKey = (typeof REFERENCE_KEYS)[number]
 
 function useInvalidate() {
@@ -401,6 +402,7 @@ export interface CreateEmployeeInput {
   gender?: string | null
   full_name_kh?: string | null
   role?: string
+  date_of_birth?: string | null
 }
 
 /**
@@ -424,6 +426,7 @@ export function useCreateEmployee() {
         p_gender: input.gender ?? null,
         p_full_name_kh: input.full_name_kh ?? null,
         p_role: input.role ?? 'employee',
+        p_date_of_birth: input.date_of_birth || null,
       })
       if (error) throw error
       return data as Employee
@@ -452,6 +455,102 @@ export function useResetPassword() {
       errorTitle: 'Could not reset the password',
       alsoInvalidate: ['employees'],
     },
+  )
+}
+
+/**
+ * Sets or clears the caller's own profile photo path.
+ *
+ * Goes through an RPC rather than a table update because employees_update is
+ * HR-only by design - staff must not be able to edit their own hire date,
+ * department or role, and RLS cannot grant a write to a single column.
+ */
+export function useSetMyAvatar() {
+  return useAppMutation<string | null, void>(
+    async (path) => {
+      const { error } = await supabase.rpc('rpc_set_my_avatar', { p_path: path })
+      if (error) throw error
+    },
+    {
+      successTitle: (_r, path) => (path ? 'Photo updated' : 'Photo removed'),
+      errorTitle: 'Could not update your photo',
+      // 'me' as well as 'employees': the signed-in person's own record is
+      // cached separately by AuthProvider, and it is the one behind the avatar
+      // in the top bar.
+      alsoInvalidate: ['employees', 'me'],
+    },
+  )
+}
+
+/** Picks an emoji avatar, which also clears any uploaded photo. */
+export function useSetMyAvatarEmoji() {
+  return useAppMutation<string | null, void>(
+    async (emoji) => {
+      const { error } = await supabase.rpc('rpc_set_my_avatar_emoji', { p_emoji: emoji })
+      if (error) throw error
+    },
+    {
+      successTitle: (_r, emoji) => (emoji ? 'Avatar updated' : 'Avatar cleared'),
+      errorTitle: 'Could not update your avatar',
+      alsoInvalidate: ['employees', 'me'],
+    },
+  )
+}
+
+/* ------------------------------------------------- compensation leave -- */
+
+export function useSubmitCompClaim() {
+  return useAppMutation<
+    { worked_from: string; worked_to: string; days_earned: number; reason: string },
+    CompLeaveClaim
+  >(
+    async (input) => {
+      const { data, error } = await supabase.rpc('rpc_submit_comp_claim', {
+        p_worked_from: input.worked_from,
+        p_worked_to: input.worked_to,
+        p_days_earned: input.days_earned,
+        p_reason: input.reason,
+      })
+      if (error) throw error
+      return data as CompLeaveClaim
+    },
+    {
+      successTitle: () => 'Claim sent',
+      successBody: () => 'It is with your approver. The days are added once approved.',
+      errorTitle: 'Could not send that claim',
+    },
+  )
+}
+
+export function useCompClaimDecision() {
+  return useAppMutation<{ id: string; approve: boolean; note?: string }, CompLeaveClaim>(
+    async ({ id, approve, note }) => {
+      const { data, error } = await supabase.rpc('rpc_comp_claim_decision', {
+        p_claim_id: id,
+        p_approve: approve,
+        p_note: note ?? null,
+      })
+      if (error) throw error
+      return data as CompLeaveClaim
+    },
+    {
+      successTitle: (c) => (c.status === 'approved' ? 'Claim approved' : 'Claim declined'),
+      successBody: (c) =>
+        c.status === 'approved'
+          ? `${c.days_earned} day(s) added to their compensation leave.`
+          : undefined,
+      errorTitle: 'Could not record that decision',
+    },
+  )
+}
+
+export function useWithdrawCompClaim() {
+  return useAppMutation<string, void>(
+    async (id) => {
+      const { error } = await supabase.rpc('rpc_withdraw_comp_claim', { p_claim_id: id })
+      if (error) throw error
+    },
+    { successTitle: () => 'Claim withdrawn', errorTitle: 'Could not withdraw that claim' },
   )
 }
 

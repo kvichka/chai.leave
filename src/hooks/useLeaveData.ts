@@ -6,6 +6,8 @@ import type {
   AppNotification,
   AppSettings,
   AuditLogRow,
+  Birthday,
+  CompLeaveClaim,
   DayPortion,
   Employee,
   Entitlement,
@@ -168,6 +170,68 @@ export function usePendingApprovals() {
         .order('days_waiting', { ascending: false })
       if (error) throw error
       return data
+    },
+  })
+}
+
+/**
+ * Birthdays for the shared calendar: every active colleague who has not opted
+ * out, as a day and month. Goes through rpc_birthdays because the employees
+ * table only lets a person read their own row and their supervisor's, and a
+ * birthday calendar has to show people in other teams.
+ */
+export function useBirthdays() {
+  return useQuery({
+    queryKey: ['birthdays'],
+    staleTime: 60 * 60 * 1000, // A birthday does not move.
+    queryFn: async (): Promise<Birthday[]> => {
+      const { data, error } = await supabase.rpc('rpc_birthdays')
+      if (error) throw error
+      return (data ?? []) as Birthday[]
+    },
+  })
+}
+
+/**
+ * Compensation claims. Row Level Security decides the scope, so one query
+ * serves both screens: your own claims on My leave, and your reporting line's
+ * claims on Approvals.
+ */
+export function useCompClaims() {
+  return useQuery({
+    queryKey: ['comp_claims'],
+    ...LIVE,
+    queryFn: async (): Promise<CompLeaveClaim[]> => {
+      const { data, error } = await supabase
+        .from('comp_leave_claims')
+        .select('*')
+        .order('worked_date', { ascending: false })
+      if (error) throw error
+      return data as CompLeaveClaim[]
+    },
+  })
+}
+
+/**
+ * Every leave request in a leave year, for the export screen.
+ *
+ * Row Level Security still applies, so a supervisor exporting gets their
+ * reporting line and HR gets everyone - the same rows each already sees on
+ * screen, in a file.
+ */
+export function useAllRequests(leaveYear: number, enabled = true) {
+  return useQuery({
+    enabled,
+    queryKey: ['requests', 'year', leaveYear],
+    ...LIVE,
+    queryFn: async (): Promise<LeaveRequest[]> => {
+      const { data, error } = await supabase
+        .from('leave_requests')
+        .select('*')
+        .eq('leave_year', leaveYear)
+        .order('start_date')
+      if (error) throw error
+      return data as LeaveRequest[]
     },
   })
 }

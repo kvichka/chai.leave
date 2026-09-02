@@ -18,7 +18,9 @@ import {
   Hourglass,
   PlaneTakeoff,
   Scale,
+  Search,
   TrendingUp,
+  X,
   UserRoundMinus,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/AppShell'
@@ -56,7 +58,7 @@ import {
 } from '@/lib/format'
 import { downloadCsv, downloadXlsx, stamp } from '@/lib/export'
 import type { ColumnDef } from '@tanstack/react-table'
-import type { LeaveBalance } from '@/lib/database.types'
+import type { LeaveBalance, TeamCoverage } from '@/lib/database.types'
 import { RemainingLeavePanel } from './hr-remaining-leave'
 
 export function HrDashboardPage() {
@@ -78,6 +80,10 @@ export function HrDashboardPage() {
   const [search, setSearch] = useState('')
   const [department, setDepartment] = useState('')
   const [grouped, setGrouped] = useState(true)
+  const [typeFilter, setTypeFilter] = useState('')
+  const [unitFilter, setUnitFilter] = useState('')
+  const [riskDept, setRiskDept] = useState('')
+  const [riskSearch, setRiskSearch] = useState('')
 
   /**
    * One filter for the whole page. Filtering only the table at the bottom, as
@@ -179,6 +185,47 @@ export function HrDashboardPage() {
     [coverage, today],
   )
 
+  /** Departments that actually appear in the risk list, for its own filter. */
+  const riskDepartments = useMemo(
+    () => [...new Set(coverageRisks.map((c) => c.department).filter(Boolean))].sort() as string[],
+    [coverageRisks],
+  )
+
+  const filteredRisks = useMemo(
+    () => (riskDept === '' ? coverageRisks : coverageRisks.filter((c) => c.department === riskDept)),
+    [coverageRisks, riskDept],
+  )
+
+  const riskColumns = useMemo<ColumnDef<TeamCoverage, unknown>[]>(
+    () => [
+      {
+        accessorKey: 'the_date',
+        header: 'Date',
+        cell: (c) => fmtDate(c.getValue() as string),
+      },
+      { accessorKey: 'department', header: 'Department' },
+      {
+        accessorKey: 'headcount',
+        header: 'Headcount',
+        cell: (c) => <span className="tabular-nums">{String(c.getValue())}</span>,
+      },
+      {
+        accessorKey: 'absent_count',
+        header: 'Away',
+        cell: (c) => <span className="tabular-nums">{String(c.getValue())}</span>,
+      },
+      {
+        accessorKey: 'absent_pct',
+        header: 'Absent',
+        cell: (c) => {
+          const pct = Number(c.getValue())
+          return <Badge tone={pct > 50 ? 'red' : 'amber'}>{fmtPercent(pct, 0)}</Badge>
+        },
+      },
+    ],
+    [],
+  )
+
   /* ----------------------------------------------------- zero-usage flag -- */
 
   const zeroUsage = useMemo(() => {
@@ -199,8 +246,35 @@ export function HrDashboardPage() {
     [employees],
   )
 
-  // balances is already department-filtered above.
-  const tableRows = balances
+  // The leave types present in the current department slice, for the picker.
+  const balanceTypes = useMemo(
+    () =>
+      [...new Map(balances.map((b) => [b.leave_type_code, b.name_en])).entries()].sort((a, b) =>
+        a[1].localeCompare(b[1]),
+      ),
+    [balances],
+  )
+
+  // balances is already department-filtered by the control in the page header.
+  const tableRows = useMemo(
+    () =>
+      balances.filter(
+        (b) =>
+          (typeFilter === '' || b.leave_type_code === typeFilter) &&
+          (unitFilter === '' || b.unit === unitFilter),
+      ),
+    [balances, typeFilter, unitFilter],
+  )
+
+  const filtersActive =
+    search.trim() !== '' || typeFilter !== '' || unitFilter !== '' || department !== ''
+
+  function clearFilters() {
+    setSearch('')
+    setTypeFilter('')
+    setUnitFilter('')
+    setDepartment('')
+  }
 
   const columns = useMemo<ColumnDef<LeaveBalance, unknown>[]>(
     () => [
@@ -513,33 +587,44 @@ export function HrDashboardPage() {
             months.
           </EmptyState>
         ) : (
-          <div className="table-wrap border-0">
-            <table className="min-w-full divide-y divide-slate-200">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="th">Date</th>
-                  <th className="th">Department</th>
-                  <th className="th text-right">Headcount</th>
-                  <th className="th text-right">Away</th>
-                  <th className="th text-right">Absent</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {coverageRisks.map((c) => (
-                  <tr key={`${c.department}-${c.the_date}`} className="bg-amber-50/40">
-                    <td className="td">{fmtDate(c.the_date)}</td>
-                    <td className="td">{c.department}</td>
-                    <td className="td text-right tabular-nums">{c.headcount}</td>
-                    <td className="td text-right tabular-nums">{c.absent_count}</td>
-                    <td className="td text-right">
-                      <Badge tone={c.absent_pct > 50 ? 'red' : 'amber'}>
-                        {fmtPercent(c.absent_pct, 0)}
-                      </Badge>
-                    </td>
-                  </tr>
+          <div className="space-y-2 p-3">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <NativeSelect
+                value={riskDept}
+                onChange={(e) => setRiskDept(e.target.value)}
+                aria-label="Filter coverage risks by department"
+                className="w-auto min-w-[11rem] text-xs"
+              >
+                <option value="">All departments</option>
+                {riskDepartments.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
                 ))}
-              </tbody>
-            </table>
+              </NativeSelect>
+              <Input
+                value={riskSearch}
+                onChange={(e) => setRiskSearch(e.target.value)}
+                placeholder="Search date or department…"
+                aria-label="Search coverage risks"
+                className="w-52"
+              />
+            </div>
+
+            <DataTable
+              data={filteredRisks}
+              columns={riskColumns}
+              globalFilter={riskSearch}
+              onGlobalFilterChange={setRiskSearch}
+              pageSize={12}
+              initialSorting={[{ id: 'absent_pct', desc: true }]}
+              rowClassName={() => 'bg-amber-50/40'}
+              empty={
+                <EmptyState icon={<AlertTriangle className="h-7 w-7" />} title="Nothing matches">
+                  No coverage risk matches that filter.
+                </EmptyState>
+              }
+            />
           </div>
         )}
       </Card>
@@ -567,11 +652,61 @@ export function HrDashboardPage() {
       {/* ---------------------------------------------------- balance table -- */}
       <section aria-labelledby="all-balances">
         <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
-          <h2 id="all-balances" className="text-sm font-semibold text-slate-800">
-            All balances
-          </h2>
-          <div className="flex flex-wrap gap-2">
-            <label className="flex cursor-pointer select-none items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50">
+          <div>
+            <h2 id="all-balances" className="text-sm font-semibold text-slate-800">
+              All balances
+            </h2>
+            <p className="text-xs text-slate-500">
+              {tableRows.length === balances.length
+                ? `${balances.length} rows`
+                : `${tableRows.length} of ${balances.length} rows`}
+            </p>
+          </div>
+        </div>
+
+        {/* One toolbar rather than controls scattered around the heading. */}
+        <div className="mb-2 rounded-xl border border-slate-200 bg-white p-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative min-w-[200px] flex-1">
+              <Search
+                className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400"
+                aria-hidden
+              />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search name, staff code or leave type…"
+                aria-label="Search balances"
+                className="pl-8"
+              />
+            </div>
+
+            <NativeSelect
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              aria-label="Filter by leave type"
+              className="w-auto min-w-[10rem] text-xs"
+            >
+              <option value="">All leave types</option>
+              {balanceTypes.map(([code, name]) => (
+                <option key={code} value={code}>
+                  {name}
+                </option>
+              ))}
+            </NativeSelect>
+
+            <NativeSelect
+              value={unitFilter}
+              onChange={(e) => setUnitFilter(e.target.value)}
+              aria-label="Filter by unit"
+              className="w-auto min-w-[9rem] text-xs"
+            >
+              <option value="">Both units</option>
+              <option value="working_day">Working days</option>
+              <option value="calendar_day">Calendar days</option>
+            </NativeSelect>
+
+            <label className="flex cursor-pointer select-none items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50">
               <input
                 type="checkbox"
                 checked={grouped}
@@ -580,14 +715,41 @@ export function HrDashboardPage() {
               />
               Group by department
             </label>
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search name, staff code, type…"
-              className="w-56"
-              aria-label="Search balances"
-            />
           </div>
+
+          {filtersActive ? (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-2">
+              <span className="text-[11px] uppercase tracking-wide text-slate-400">Filtered by</span>
+              {/* Department is the page-wide control in the header. Shown here
+                  so it is obvious why the table is short, and clearable from
+                  the same place as everything else. */}
+              {department ? (
+                <FilterChip label={department} onClear={() => setDepartment('')} />
+              ) : null}
+              {typeFilter ? (
+                <FilterChip
+                  label={balanceTypes.find(([c]) => c === typeFilter)?.[1] ?? typeFilter}
+                  onClear={() => setTypeFilter('')}
+                />
+              ) : null}
+              {unitFilter ? (
+                <FilterChip
+                  label={unitFilter === 'working_day' ? 'Working days' : 'Calendar days'}
+                  onClear={() => setUnitFilter('')}
+                />
+              ) : null}
+              {search.trim() ? (
+                <FilterChip label={`"${search.trim()}"`} onClear={() => setSearch('')} />
+              ) : null}
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="ml-auto rounded px-1.5 py-0.5 text-[11px] font-medium text-chai-700 hover:bg-chai-50"
+              >
+                Clear all
+              </button>
+            </div>
+          ) : null}
         </div>
 
         <DataTable
@@ -612,5 +774,22 @@ export function HrDashboardPage() {
         </p>
       </section>
     </>
+  )
+}
+
+/** One applied filter, with a way to remove just that one. */
+function FilterChip({ label, onClear }: { label: string; onClear: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-chai-50 py-0.5 pl-2 pr-1 text-[11px] font-medium text-chai-800">
+      {label}
+      <button
+        type="button"
+        onClick={onClear}
+        aria-label={`Remove filter ${label}`}
+        className="grid h-4 w-4 place-items-center rounded-full text-chai-600 hover:bg-chai-100 hover:text-chai-900"
+      >
+        <X className="h-3 w-3" />
+      </button>
+    </span>
   )
 }

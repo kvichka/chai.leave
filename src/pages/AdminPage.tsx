@@ -3,6 +3,7 @@ import * as Tabs from '@radix-ui/react-tabs'
 import {
   AlertTriangle,
   CalendarDays,
+  Download,
   History,
   Plus,
   RefreshCw,
@@ -44,6 +45,7 @@ import {
   useSaveLeaveType,
 } from '@/hooks/useMutations'
 import { EmployeesTab } from './admin-employees'
+import { ExportTab } from './admin-export'
 import {
   EntitlementBulkImport,
   HolidayBulkImport,
@@ -59,6 +61,7 @@ const TABS = [
   { id: 'holidays', label: 'Public holidays', icon: CalendarDays },
   { id: 'entitlements', label: 'Entitlements', icon: RefreshCw },
   { id: 'audit', label: 'Audit log', icon: History },
+  { id: 'export', label: 'Export data', icon: Download },
 ] as const
 
 export function AdminPage() {
@@ -70,7 +73,7 @@ export function AdminPage() {
     <>
       <PageHeader
         title="Administration"
-        description="Employees, leave types, holidays, entitlements and the audit trail."
+        description="Employees, leave types, holidays, entitlements, exports and the audit trail."
       />
 
       <Tabs.Root value={tab} onValueChange={setTab}>
@@ -103,6 +106,9 @@ export function AdminPage() {
         </Tabs.Content>
         <Tabs.Content value="entitlements">
           <EntitlementsTab leaveYear={leaveYear} />
+        </Tabs.Content>
+        <Tabs.Content value="export">
+          <ExportTab />
         </Tabs.Content>
         <Tabs.Content value="audit">
           <AuditTab />

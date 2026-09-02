@@ -174,15 +174,6 @@ export function BulkImport<T extends CsvRow = CsvRow>({
             e.target.value = '' // let the same file be chosen twice
           }}
         />
-        <div className="flex flex-wrap gap-x-6 gap-y-1 px-4 py-3 text-xs text-slate-500">
-          {columns.map((c) => (
-            <span key={c.key}>
-              <code className="text-[11px] font-medium text-slate-700">{c.key}</code>
-              {c.required ? <span className="text-chaiDarkRed"> *</span> : null}
-              {c.hint ? <span className="ml-1 text-slate-400">— {c.hint}</span> : null}
-            </span>
-          ))}
-        </div>
       </Card>
 
       <Dialog

@@ -35,6 +35,10 @@ export interface Employee {
   gender: 'M' | 'F' | null
   created_at: string
   updated_at: string
+  date_of_birth: string | null
+  avatar_path: string | null
+  avatar_emoji: string | null
+  show_birthday: boolean
 }
 
 export interface LeaveType {
@@ -282,3 +286,33 @@ export interface TeamAbsence {
   is_self: boolean
 }
 
+
+/**
+ * Day and month only, from rpc_birthdays. The year deliberately never leaves
+ * the database - see supabase/migrations/0015_birthdays.sql.
+ */
+export interface Birthday {
+  employee_id: string
+  full_name: string
+  department: string | null
+  birth_month: number
+  birth_day: number
+}
+
+/** A claim for time off in lieu. See supabase/migrations/0018_compensation_leave.sql. */
+export interface CompLeaveClaim {
+  id: string
+  employee_id: string
+  worked_date: string
+  worked_to: string
+  days_earned: number
+  reason: string
+  status: LeaveStatus
+  leave_year: number
+  supervisor_id: string | null
+  decided_by: string | null
+  decided_at: string | null
+  decision_note: string | null
+  submitted_at: string | null
+  created_at: string
+}

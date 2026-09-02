@@ -12,11 +12,11 @@ import {
   startOfMonth,
   startOfWeek,
 } from 'date-fns'
-import { CalendarRange, ChevronLeft, ChevronRight } from 'lucide-react'
+import { CalendarRange, ChevronLeft, ChevronRight, Cake } from 'lucide-react'
 import { PageHeader } from '@/components/layout/AppShell'
 import { Button } from '@/components/ui/Button'
 import { Card, EmptyState, NativeSelect, Skeleton } from '@/components/ui/primitives'
-import { useHolidays, useTeamAbsences } from '@/hooks/useLeaveData'
+import { useBirthdays, useHolidays, useTeamAbsences } from '@/hooks/useLeaveData'
 import { useAuth } from '@/providers/AuthProvider'
 import { fmtDate, isoDate, leaveTypeColor } from '@/lib/format'
 import { cn } from '@/lib/cn'
@@ -58,6 +58,23 @@ export function CalendarPage() {
     () => (department ? absences.filter((a) => a.department === department) : absences),
     [absences, department],
   )
+
+  const { data: birthdays = [] } = useBirthdays()
+
+  /**
+   * Keyed on month-day, not a full date: rpc_birthdays never returns the year,
+   * and the same key then matches whichever year the calendar is showing.
+   */
+  const birthdaysByMonthDay = useMemo(() => {
+    const map = new Map<string, typeof birthdays>()
+    for (const b of birthdays) {
+      const key = `${String(b.birth_month).padStart(2, '0')}-${String(b.birth_day).padStart(2, '0')}`
+      const bucket = map.get(key)
+      if (bucket) bucket.push(b)
+      else map.set(key, [b])
+    }
+    return map
+  }, [birthdays])
 
   const byDate = useMemo(() => {
     const map = new Map<string, TeamAbsence[]>()
@@ -147,6 +164,11 @@ export function CalendarPage() {
             <span className="inline-flex items-center gap-1.5">
               <span className="h-3 w-3 rounded-sm bg-rose-100 ring-1 ring-rose-200" /> Public holiday
             </span>
+            {birthdays.length > 0 ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Cake className="h-3 w-3 text-chaiDarkGold" aria-hidden /> Birthday
+              </span>
+            ) : null}
             {legendCodes.slice(0, 6).map((name) => {
               const code = filtered.find((a) => a.leave_type_name === name)
               return (
@@ -221,6 +243,17 @@ export function CalendarPage() {
                         {holiday.name_en}
                       </p>
                     ) : null}
+
+                    {(birthdaysByMonthDay.get(format(day, 'MM-dd')) ?? []).map((b) => (
+                      <p
+                        key={b.employee_id}
+                        className="mb-1 flex items-center gap-1 truncate rounded bg-chaiLightGold/40 px-1 py-0.5 text-[10px] font-medium text-chaiDarkGold"
+                        title={`${b.full_name}'s birthday${b.department ? ` — ${b.department}` : ''}`}
+                      >
+                        <Cake className="h-2.5 w-2.5 shrink-0" aria-hidden />
+                        <span className="truncate">{b.full_name}</span>
+                      </p>
+                    ))}
 
                     <ul className="space-y-0.5">
                       {items.slice(0, view === 'week' ? 20 : 3).map((a) => (

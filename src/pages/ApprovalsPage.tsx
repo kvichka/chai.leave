@@ -20,6 +20,7 @@ import {
   useSettings,
   useTeamAbsences,
 } from '@/hooks/useLeaveData'
+import { CompClaimApprovals } from '@/components/CompClaimApprovals'
 import { ApprovalHistory } from './approval-history'
 import { useHrDecision, useSupervisorDecision } from '@/hooks/useMutations'
 import { useAuth } from '@/providers/AuthProvider'
@@ -107,6 +108,10 @@ export function ApprovalsPage() {
           ) : null
         }
       />
+
+      {/* Above the leave queue: a claim is usually a day or two old and the
+          person is waiting to know whether the time counts. */}
+      <CompClaimApprovals />
 
       {isLoading ? (
         <TableSkeleton rows={5} cols={6} />

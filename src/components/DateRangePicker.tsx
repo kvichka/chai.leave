@@ -38,6 +38,9 @@ export function DateRangePicker({
   holidays,
   blockNonWorking,
   minDate,
+  maxDate,
+  initialMonth,
+  firstDayPrompt,
   id,
 }: {
   value: DateRangeValue
@@ -45,11 +48,23 @@ export function DateRangePicker({
   holidays: Map<string, { name: string; half: boolean }>
   blockNonWorking: boolean
   minDate?: string
+  /** Nothing after this date is selectable. Used by claims for work already done. */
+  maxDate?: string
+  /**
+   * Month to open on when nothing is chosen yet. A forward-looking request
+   * wants this month; a claim for work already done wants last month, so the
+   * useful dates are on screen instead of a grid of struck-out days.
+   */
+  initialMonth?: string
+  /** Overrides "Click the first day of your leave." for non-leave pickers. */
+  firstDayPrompt?: string
   id?: string
 }) {
   const [open, setOpen] = useState(false)
   const [cursor, setCursor] = useState<Date>(() =>
-    value.start ? startOfMonth(parseISO(value.start)) : startOfMonth(new Date()),
+    value.start
+      ? startOfMonth(parseISO(value.start))
+      : startOfMonth(initialMonth ? parseISO(initialMonth) : new Date()),
   )
   /** True between the first and second click of a range. */
   const [extending, setExtending] = useState(false)
@@ -151,7 +166,7 @@ export function DateRangePicker({
           >
             {extending
               ? 'Now click the last day. For a single day, press Done.'
-              : 'Click the first day of your leave.'}
+              : (firstDayPrompt ?? 'Click the first day of your leave.')}
           </p>
 
           <div className="flex gap-4" onMouseLeave={() => setHovered(null)}>
@@ -162,6 +177,7 @@ export function DateRangePicker({
               holidays={holidays}
               blockNonWorking={blockNonWorking}
               minDate={minDate}
+              maxDate={maxDate}
               onPick={pick}
               onHover={setHovered}
             />
@@ -173,6 +189,7 @@ export function DateRangePicker({
                 holidays={holidays}
                 blockNonWorking={blockNonWorking}
                 minDate={minDate}
+                maxDate={maxDate}
                 onPick={pick}
                 onHover={setHovered}
               />
@@ -231,6 +248,7 @@ function MonthGrid({
   holidays,
   blockNonWorking,
   minDate,
+  maxDate,
   onPick,
   onHover,
 }: {
@@ -240,6 +258,7 @@ function MonthGrid({
   holidays: Map<string, { name: string; half: boolean }>
   blockNonWorking: boolean
   minDate?: string
+  maxDate?: string
   onPick: (d: Date) => void
   onHover: (iso: string | null) => void
 }) {
@@ -252,6 +271,7 @@ function MonthGrid({
   const start = value.start ? parseISO(value.start) : null
   const end = value.end ? parseISO(value.end) : null
   const min = minDate ? parseISO(minDate) : null
+  const max = maxDate ? parseISO(maxDate) : null
 
   return (
     <div>
@@ -268,7 +288,8 @@ function MonthGrid({
           const weekend = isWeekend(day)
           const nonWorking = weekend || (!!holiday && !holiday.half)
           const tooEarly = min ? isBefore(day, min) : false
-          const disabled = outside || tooEarly || (blockNonWorking && nonWorking)
+          const tooLate = max ? isAfter(day, max) : false
+          const disabled = outside || tooEarly || tooLate || (blockNonWorking && nonWorking)
 
           const inRange = start && end && !isBefore(day, start) && !isAfter(day, end)
           const inPreview = preview && iso >= preview.start && iso <= preview.end
