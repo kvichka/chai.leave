@@ -113,7 +113,39 @@ export function LoginPage() {
  * a PIN committed to a public repository is a PIN anyone can use against the
  * live project.
  */
-const DEMO_PASSWORD = import.meta.env.VITE_DEMO_PASSWORD as string | undefined
+const DEMO_STORAGE_KEY = 'chai-leave:demo-password'
+
+/**
+ * Where the shared demo password comes from, in order:
+ *
+ *   1. VITE_DEMO_PASSWORD in .env.local  - local development, gitignored.
+ *   2. localStorage on this browser      - the deployed site.
+ *
+ * The second is why the panel can exist on a public URL at all. The password
+ * is typed once, by you, into the browser you test from; it never enters the
+ * published JavaScript, so someone else opening the site finds a locked panel
+ * and no way past it. Sokha Meas is an HR administrator who can read every
+ * record and reset anyone's password - that account is not something to hand
+ * out with the URL.
+ */
+function readDemoPassword(): string | undefined {
+  // The import.meta.env.DEV guard is load-bearing, not decoration. Vite inlines
+  // VITE_DEMO_PASSWORD as a string literal at build time, so without it a
+  // production build run on a machine that has .env.local would compile the
+  // password straight into the published JavaScript. With it, the branch is
+  // dead in production and the literal is dropped. scripts/check-bundle.mjs
+  // fails the build if it ever reappears.
+  const fromEnv = import.meta.env.DEV
+    ? (import.meta.env.VITE_DEMO_PASSWORD as string | undefined)
+    : undefined
+  if (fromEnv) return fromEnv
+  try {
+    return window.localStorage.getItem(DEMO_STORAGE_KEY) ?? undefined
+  } catch {
+    // Private browsing, or storage blocked. Fall back to the locked panel.
+    return undefined
+  }
+}
 
 const DEMO_USERS: { email: string; name: string; role: string; note: string }[] = [
   { email: 'sokha.meas@example.org', name: 'Sokha Meas', role: 'HR admin', note: 'Sees everyone' },
@@ -135,31 +167,56 @@ const ROLE_STYLES: Record<string, string> = {
 }
 
 /**
- * One-click sign-in for the demo staff. Rendered only when this is a
- * development build AND a demo password is configured, so Vite strips it from
- * production and it stays absent from any checkout that has not opted in.
+ * One-click sign-in for the demo staff, on localhost and on the deployed test
+ * site alike. Locked until this browser has been given the shared password.
  */
 function DevSignIn() {
-  if (!import.meta.env.DEV || !DEMO_PASSWORD) return null
   return <DevSignInPanel />
 }
 
 function DevSignInPanel() {
   const { signIn } = useAuth()
+  const [password, setPassword] = useState<string | undefined>(readDemoPassword)
+  const [entry, setEntry] = useState('')
   const [pending, setPending] = useState<string | null>(null)
   const toast = useToast()
+
+  function unlock(e: React.FormEvent) {
+    e.preventDefault()
+    const value = entry.trim()
+    if (!value) return
+    // Not verified here - there is nothing to verify it against without a
+    // round trip. A wrong one simply fails on the first click, and the toast
+    // below says so.
+    try {
+      window.localStorage.setItem(DEMO_STORAGE_KEY, value)
+    } catch {
+      /* storage blocked: it still works for this page view */
+    }
+    setPassword(value)
+    setEntry('')
+  }
+
+  function lock() {
+    try {
+      window.localStorage.removeItem(DEMO_STORAGE_KEY)
+    } catch {
+      /* nothing to clear */
+    }
+    setPassword(undefined)
+  }
 
   async function go(email: string) {
     setPending(email)
     try {
-      await signIn(email, DEMO_PASSWORD!)
+      await signIn(email, password!)
       // On success the auth listener swaps the tree out from under us.
     } catch (err) {
       const message = humanError(err)
       toast.error(
         'That demo account could not sign in',
         /invalid login credentials/i.test(message)
-          ? 'The account is missing, or VITE_DEMO_PASSWORD in .env.local no longer matches the password set on the demo staff.'
+          ? 'Wrong demo password for this browser, or the account no longer exists. Use Forget to clear it and enter it again.'
           : message,
       )
       setPending(null)
@@ -170,9 +227,32 @@ function DevSignInPanel() {
     <details className="mt-4 overflow-hidden rounded-lg border border-dashed border-slate-300 bg-chai-50/60">
       <summary className="flex cursor-pointer items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600">
         <FlaskConical className="h-3.5 w-3.5" />
-        Sign in as a demo user — no password
+        {password ? 'Sign in as a demo user — one click' : 'Demo sign-in (locked)'}
       </summary>
       <div className="border-t border-dashed border-slate-300 p-2">
+        {!password ? (
+          <form className="space-y-2 p-1" onSubmit={unlock}>
+            <p className="text-[11px] leading-relaxed text-slate-500">
+              Enter the shared demo password once and this browser remembers it, turning the
+              list below into one-click sign-in. It is stored only here — never in the
+              published site.
+            </p>
+            <div className="flex gap-1.5">
+              <Input
+                type="password"
+                value={entry}
+                onChange={(e) => setEntry(e.target.value)}
+                placeholder="Demo password"
+                aria-label="Demo password"
+                className="text-xs"
+              />
+              <Button type="submit" size="sm" variant="secondary" disabled={!entry.trim()}>
+                Unlock
+              </Button>
+            </div>
+          </form>
+        ) : (
+        <>
         <ul className="space-y-1">
           {DEMO_USERS.map((u) => (
             <li key={u.email}>
@@ -202,10 +282,20 @@ function DevSignInPanel() {
             </li>
           ))}
         </ul>
-        <p className="px-2 pb-0.5 pt-2 text-[11px] leading-relaxed text-slate-500">
-          Test accounts on the reserved example.org domain, sharing one password from
-          .env.local. Compiled out of production builds.
-        </p>
+        <div className="flex items-center justify-between gap-2 px-2 pb-0.5 pt-2">
+          <p className="text-[11px] leading-relaxed text-slate-500">
+            Test accounts on the reserved example.org domain, sharing one password.
+          </p>
+          <button
+            type="button"
+            onClick={lock}
+            className="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium text-slate-500 hover:bg-white hover:text-slate-700"
+          >
+            Forget
+          </button>
+        </div>
+        </>
+        )}
       </div>
     </details>
   )

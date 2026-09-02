@@ -11,8 +11,15 @@
  * string in its own source, so the check fires on every build. These look for
  * actual credentials instead.
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import dotenv from 'dotenv'
+
+// So the demo-password check below has something to look for when run locally.
+// CI has no .env.local, which is exactly why CI cannot leak the password.
+for (const f of ['.env.local', '.env']) {
+  if (existsSync(f)) dotenv.config({ path: f, override: false })
+}
 
 const DIST = 'dist'
 const problems = []
@@ -77,6 +84,26 @@ for (const file of text) {
     }
     if (/"role"\s*:\s*"service_role"/.test(decoded)) {
       problems.push(`${file} contains a service_role JWT. That key bypasses Row Level Security.`)
+    }
+  }
+}
+
+/* --------------------------------------------- demo password leak -------- */
+
+// The one-click demo panel reads its password from localStorage in production,
+// so the password must never appear in the published JavaScript. It would take
+// only the removal of an import.meta.env.DEV guard in LoginPage.tsx to change
+// that, and one of those demo accounts is an HR administrator. Checked only
+// when the password is known to this process - CI does not have .env.local,
+// and there is nothing to look for there anyway.
+const demoPassword = process.env.VITE_DEMO_PASSWORD?.trim()
+if (demoPassword && demoPassword.length >= 6) {
+  for (const file of files.filter((f) => f.endsWith('.js') || f.endsWith('.html'))) {
+    if (readFileSync(file, 'utf8').includes(demoPassword)) {
+      problems.push(
+        `${file} contains the demo password from VITE_DEMO_PASSWORD. It must never be ` +
+          'compiled in — check the import.meta.env.DEV guard in src/pages/LoginPage.tsx.',
+      )
     }
   }
 }
